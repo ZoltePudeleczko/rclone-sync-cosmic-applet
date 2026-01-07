@@ -1,4 +1,5 @@
-# Rclone Sync Helper
+# Rclone Sync Applet
+[![Rust](https://github.com/ZoltePudeleczko/rclone-sync-cosmic-applet/actions/workflows/rust.yml/badge.svg)](https://github.com/ZoltePudeleczko/rclone-sync-cosmic-applet/actions/workflows/rust.yml)
 
 COSMIC panel applet for monitoring and triggering **rclone bisync** jobs, plus managing an optional `systemd --user` timer per job.
 
