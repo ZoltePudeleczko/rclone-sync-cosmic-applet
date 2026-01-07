@@ -1,0 +1,14 @@
+[Desktop Entry]
+Name=Rclone Sync Helper
+Comment=Rclone bisync launcher and status applet
+Type=Application
+Icon=io.rclone.sync-helper
+TryExec=rclone_sync_helper
+Exec=rclone_sync_helper
+Terminal=false
+StartupNotify=true
+Categories=COSMIC
+Keywords=COSMIC
+NoDisplay=true
+X-CosmicApplet=true
+X-CosmicHoverPopup=Auto
