@@ -215,7 +215,16 @@ fn detect_changed_count(result: &ScriptResult) -> Option<u32> {
     // Extract numeric counters from rclone bisync output.
     let combined = format!("{}\n{}", result.stdout, result.stderr);
 
-    // Look for "Transferred:" and "Copied:" labels with completion counts.
+    // Prefer per-pair "Path1/Path2: N changes:" counters. These appear once per bisync run and
+    // work well with multi-pair jobs (we can sum across pairs).
+    let (changes_total, saw_changes_lines) = sum_path_changes(&combined);
+    if saw_changes_lines {
+        return Some(changes_total);
+    }
+
+    // Fallback: Look for "Transferred:" and "Copied:" labels with completion counts.
+    // This is less reliable for multi-pair runs and also doesn't count deletions, but it helps
+    // for logs where change counters aren't present.
     let transferred = extract_last_number_after_label(&combined, "Transferred:");
     let copied = extract_last_number_after_label(&combined, "Copied:");
 
@@ -226,6 +235,32 @@ fn detect_changed_count(result: &ScriptResult) -> Option<u32> {
         (None, Some(c)) => Some(c),
         (None, None) => None,
     }
+}
+
+fn sum_path_changes(text: &str) -> (u32, bool) {
+    let mut total: u32 = 0;
+    let mut saw_any = false;
+
+    for line in text.lines() {
+        // Example:
+        // 2026/01/11 22:25:26 INFO  : Path1:   40 changes:    4 new,   36 newer,    0 older,    0 deleted
+        for label in ["Path1:", "Path2:"] {
+            let Some(pos) = line.find(label) else { continue };
+            let after = line[pos + label.len()..].trim_start();
+            let mut parts = after.split_whitespace();
+            let Some(num_str) = parts.next() else { continue };
+            let Some(changes_str) = parts.next() else { continue };
+            if !changes_str.starts_with("changes") {
+                continue;
+            }
+            if let Ok(n) = num_str.parse::<u32>() {
+                total = total.saturating_add(n);
+                saw_any = true;
+            }
+        }
+    }
+
+    (total, saw_any)
 }
 
 fn extract_last_number_after_label(text: &str, label: &str) -> Option<u32> {
@@ -338,6 +373,19 @@ Elapsed time:       6m0.6s"#;
             Some(262),
             "Should extract 262 from the 100% completion line"
         );
+    }
+
+    #[test]
+    fn detect_changed_count_sums_changes_across_multiple_pairs() {
+        // Multi-pair combined stderr: should sum per-pair "PathN: X changes:" lines.
+        let stderr = r#"2026/01/11 22:25:26 INFO  : Path1:   40 changes:    4 new,   36 newer,    0 older,    0 deleted
+2026/01/11 22:28:49 INFO  : Path1:    5 changes:    0 new,    4 newer,    0 older,    1 deleted
+2026/01/11 22:33:08 INFO  : No changes found
+2026/01/11 22:33:08 NOTICE: 
+Transferred:   	          0 B / 0 B, -, 0 B/s, ETA -"#;
+        let result = sample_result(0, "", stderr);
+        let count = detect_changed_count(&result);
+        assert_eq!(count, Some(45), "Should sum 40 + 5 across pairs");
     }
 
     #[test]
